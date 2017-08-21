@@ -5,6 +5,7 @@ class URITests: XCTestCase {
 	static var allTests = [
 		("testURI", testURI),
 		("testModify", testModify),
+		("testQuery", testQuery),
 	]
 
 	func testURI() {
@@ -76,5 +77,14 @@ class URITests: XCTestCase {
 		XCTAssertEqual(uri.path, "/one/two")
 		XCTAssertEqual(uri.query, "page=1")
 		XCTAssertEqual(uri.fragment, "main")
+	}
+
+	func testQuery() {
+		let uri = try! URI("http://example.com/?key=value&%D0%BA%D0%BB%D1%8E%D1%87=%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%d0%bd%d0%b8%d0%b5&a+b=b+a&x%2By=y%2Bx")
+		XCTAssertEqual(uri.queryParams["key"], "value")
+		XCTAssertEqual(uri.queryParams["ключ"], "значение")
+		XCTAssertEqual(uri.queryParams["a b"], "b a")
+		XCTAssertEqual(uri.queryParams["x+y"], "y+x")
+		XCTAssertEqual("\(uri.queryParams)", "key=value&%D0%BA%D0%BB%D1%8E%D1%87=%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5&a+b=b+a&x%2By=y%2Bx")
 	}
 }

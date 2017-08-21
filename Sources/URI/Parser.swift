@@ -320,4 +320,31 @@ enum URIParser {
 			}
 		}
 	}
+
+	// pct-encoded = "%" HEXDIG HEXDIG
+	static func decodePctEncoded(uri: Substring, index i: inout String.Index) -> String {
+		var utf8octets = [UInt8]()
+		repeat {
+			uri.formIndex(after: &i)
+			var octet: UInt8 = 0
+			let start = i
+			for _ in 1...2 {
+				let c = uri[i]
+				switch c {
+					case "0"..."9":
+						octet = (octet << 4) | UInt8(c.unicodeScalars.first!.value - 0x30)
+					case "a"..."f":
+						octet = (octet << 4) | UInt8(c.unicodeScalars.first!.value - 0x57)
+					case "A"..."F":
+						octet = (octet << 4) | UInt8(c.unicodeScalars.first!.value - 0x37)
+					default:
+						i = start
+						return "%"
+				}
+				uri.formIndex(after: &i)
+			}
+			utf8octets.append(octet)
+		} while i != uri.endIndex && uri[i] == "%"
+		return String(decoding: utf8octets, as: UTF8.self)
+	}
 }
