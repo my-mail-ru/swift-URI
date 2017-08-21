@@ -47,8 +47,9 @@ extension URI {
 			return storage.fragment
 		}
 
-		var pathSegments: [String] {
-			return storage.pathSegments
+		var pathSegments: PathSegments {
+			get { return storage.pathSegments }
+			set { storage.pathSegments = newValue }
 		}
 
 		public mutating func set(scheme: String) throws {

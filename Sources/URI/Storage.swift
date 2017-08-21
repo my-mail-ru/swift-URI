@@ -12,7 +12,7 @@ final class URIStorage {
 	private var _query: Substring?
 	private var _fragment: Substring?
 
-	private var _pathSegments: [String]? = nil
+	private var _pathSegments: PathSegments? = nil
 	private var _queryParams: QueryParams? = nil
 
 	// URI         = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
@@ -182,31 +182,21 @@ final class URIStorage {
 		return _fragment.map(String.init)
 	}
 
-	var pathSegments: [String] {
-		if let segments = _pathSegments {
+	var pathSegments: PathSegments {
+		get {
+			if let segments = _pathSegments {
+				return segments
+			}
+			let segments = PathSegments(_path)
+			_pathSegments = segments
 			return segments
 		}
-		var segments = [String]()
-		var i = _path.startIndex
-		if i != _path.endIndex {
-			var segmentStart: String.Index
-			if _path[i] == "/" {
-				_path.formIndex(after: &i)
-			}
-			segmentStart = i
-			while i != _path.endIndex {
-				if _path[i] == "/" {
-					segments.append(String(_path[segmentStart..<i]))
-					_path.formIndex(after: &i)
-					segmentStart = i
-				} else {
-					_path.formIndex(after: &i)
-				}
-			}
-			segments.append(String(_path[segmentStart..<i]))
+		set {
+			_pathSegments = newValue
+			_path = Substring("\(newValue)")
+			_opaque = nil
+			_uri = nil
 		}
-		_pathSegments = segments
-		return segments
 	}
 
 	var queryParams: QueryParams {

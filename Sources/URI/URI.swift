@@ -42,8 +42,9 @@ public struct URI : URIProtocol {
 		return storage.fragment
 	}
 
-	var pathSegments: [String] {
-		return storage.pathSegments
+	var pathSegments: PathSegments {
+		get { return storage.pathSegments }
+		set { storage.pathSegments = newValue }
 	}
 
 	var queryParams: QueryParams {
