@@ -4,17 +4,17 @@ public struct URIQueryParams {
 		didSet { original = nil }
 	}
 
-	subscript(name: String) -> String? {
+	public subscript(name: String) -> String? {
 		get { return storage[name].flatMap { $0.first } }
 		set { storage[name] = newValue.map { [$0] } }
 	}
 
-	subscript(valuesFor name: String) -> [String] {
+	public subscript(valuesFor name: String) -> [String] {
 		get { return storage[name] ?? [] }
 		set { storage[name] = newValue.isEmpty ? nil : newValue }
 	}
 
-	init(_ params: [(name: String, value: String)]) {
+	public init(_ params: [(name: String, value: String)]) {
 		original = params
 		var dict = [String: [String]]()
 		for p in params {

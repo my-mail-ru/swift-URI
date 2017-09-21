@@ -7,7 +7,7 @@ public struct URIUserinfo : _URIComponent {
 		self.isNormalized = isNormalized
 	}
 
-	init(_ userinfo: String) throws {
+	public init(_ userinfo: String) throws {
 		try URIParser.validateUserinfo(userinfo)
 		self.init(_valid: userinfo, isNormalized: false)
 	}

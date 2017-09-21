@@ -1,5 +1,5 @@
 import XCTest
-@testable import URI
+import URI
 
 class URITests: XCTestCase {
 	static var allTests = [

@@ -7,7 +7,7 @@ public struct URIHost : _URIComponent {
 		self.isNormalized = isNormalized
 	}
 
-	init(_ host: String) throws {
+	public init(_ host: String) throws {
 		try URIParser.validateHost(host)
 		self.init(_valid: host, isNormalized: false)
 	}
