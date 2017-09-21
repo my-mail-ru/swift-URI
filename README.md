@@ -6,6 +6,36 @@ The implementation hardly tries to be correct and efficient. It uses COW (copy o
 `URI.HTTP` similiary to `String` and `Array` implementations. A URI and its components are validated
 on initialization.
 
+## Synopsis
+
+```swift
+var uri: URI = "http://example.com/%D0%BF%D1%83%D1%82%D1%8C/%D0%B4%D0%BE/resource?p1=v1&%D0%BF2=%D0%B72"
+
+print(uri.host ?? "nil") // example.com
+print(uri.path) // /%D0%BF%D1%83%D1%82%D1%8C/%D0%B4%D0%BE/resource
+
+for s in uri.path.segments {
+	print(s)
+}
+// путь
+// до
+// resource
+
+print(uri.query ?? "nil") // p1=v1&%D0%BF2=%D0%B72
+
+for (name, value) in uri.query?.params ?? [:] {
+	print("N: \(name), V: \(value)")
+}
+// N: p1, V: v1
+// N: п2, V: з2
+
+uri.host = "mail.ru"
+uri.path.segments.append("child")
+uri.query?.params["p3"] = "v3"
+
+print(uri) // http://mail.ru/%D0%BF%D1%83%D1%82%D1%8C/%D0%B4%D0%BE/resource/child?p1=v1&%D0%BF2=%D0%B72&p3=v3
+```
+
 ## Public API
 
 ### URI
