@@ -7,92 +7,84 @@ extension URI {
 		public init(_ uri: String) throws {
 			storage = try URIStorage(uri)
 			guard storage.scheme == "http" || storage.scheme == "https" else { throw URIError.invalidScheme }
-			guard storage.host != nil && !storage.host!.isEmpty else { throw URIError.invalidAuthority }
+			guard storage.host != nil && storage.host != "" else { throw URIError.invalidAuthority }
 		}
 
-		public init(scheme: String = "http", userinfo: String? = nil, host: String, port: UInt? = nil, path: String, query: String? = nil, fragment: String? = nil) throws {
+		public init(_ uri: URI) throws {
+			storage = uri.storage
+			guard storage.scheme == "http" || storage.scheme == "https" else { throw URIError.invalidScheme }
+			guard storage.host != nil && storage.host != "" else { throw URIError.invalidAuthority }
+		}
+
+		public init(scheme: URIScheme = "http", userinfo: URIUserinfo? = nil, host: URIHost, port: UInt? = nil, path: URIPath, query: URIQuery? = nil, fragment: URIFragment? = nil) throws {
 			guard scheme == "http" || scheme == "https" else { throw URIError.invalidScheme }
+			guard host != "" else { throw URIError.invalidAuthority }
 			storage = try URIStorage(scheme: scheme, userinfo: userinfo, host: host, port: port, path: path, query: query, fragment: fragment)
 		}
 
-		public var scheme: String {
+		public var scheme: URIScheme {
 			return storage.scheme
+		}
+
+		public mutating func set(scheme: URIScheme) throws {
+			guard scheme == "http" || scheme == "https" else { throw URIError.invalidScheme }
+			prepareStorage()
+			storage.scheme = scheme
+			switch (scheme, storage.port) {
+				case (.http, .some(80)): storage.port = nil
+				case (.https, .some(443)): storage.port = nil
+				case (.http, nil): storage.port = 443
+				case (.https, nil): storage.port = 80
+				default: break
+			}
 		}
 
 		public var opaque: String {
 			return storage.opaque
 		}
 
-		public var userinfo: String? {
-			return storage.userinfo
+		public var userinfo: URIUserinfo? {
+			get { return storage.userinfo }
+			set { prepareStorage(); storage.userinfo = newValue }
 		}
 
-		public var host: String {
+		public var host: URIHost {
 			return storage.host!
 		}
 
+		public mutating func set(host: URIHost) throws {
+			guard host != "" else { throw URIError.invalidAuthority }
+			prepareStorage()
+			storage.host = host
+		}
+
 		public var port: UInt {
-			return storage.port ?? (storage.scheme == "https" ? 443 : 80)
+			get { return storage.port ?? (storage.scheme == "https" ? 443 : 80) }
+			set {
+				prepareStorage();
+				let port: UInt?
+				switch (scheme, newValue) {
+					case (.http, 80): port = nil
+					case (.https, 443): port = nil
+					default: port = newValue
+				}
+				storage.port = port
+			}
 		}
 		
-		public var path: String {
-			return storage.path
+		public var path: URIPath {
+			get { return storage.path }
+			set { prepareStorage(); storage.path = newValue }
 		}
 
-		public var query: String? {
-			return storage.query
+		public var query: URIQuery? {
+			get { return storage.query }
+			set { prepareStorage(); storage.query = newValue }
 		}
 
-		public var fragment: String? {
-			return storage.fragment
-		}
-
-		var pathSegments: PathSegments {
-			get { return storage.pathSegments }
-			set { storage.pathSegments = newValue }
-		}
-
-		public mutating func set(scheme: String) throws {
-			guard scheme == "http" || scheme == "https" else { throw URIError.invalidScheme }
-			prepareStorage()
-			try storage.set(scheme: scheme)
-		}
-
-		public mutating func set(userinfo: String?) throws {
-			prepareStorage()
-			try storage.set(userinfo: userinfo)
-		}
-
-		public mutating func set(host: String) throws {
-			prepareStorage()
-			guard !host.isEmpty else { throw URIError.invalidAuthority }
-			try storage.set(host: host)
-		}
-
-		public mutating func set(port: UInt) throws {
-			prepareStorage()
-			let portOpt: UInt?
-			switch (storage.scheme, port) {
-				case ("http", 80): portOpt = nil
-				case ("https", 443): portOpt = nil
-				default: portOpt = port
-			}
-			try storage.set(port: portOpt)
-		}
-
-		public mutating func set(path: String) throws {
-			prepareStorage()
-			try storage.set(path: path)
-		}
-
-		public mutating func set(query: String?) throws {
-			prepareStorage()
-			try storage.set(query: query)
-		}
-
-		public mutating func set(fragment: String?) throws {
-			prepareStorage()
-			try storage.set(fragment: fragment)
+		public var fragment: URIFragment? {
+			get { return storage.fragment }
+			set { prepareStorage(); storage.fragment = newValue }
 		}
 
 		private mutating func prepareStorage() {
@@ -101,9 +93,8 @@ extension URI {
 			}
 		}
 
-		public var normalized: URI.HTTP {
-			// TODO
-			return self
+		public func normalized() -> URI.HTTP {
+			return self // TODO
 		}
 	}
 }
@@ -111,5 +102,11 @@ extension URI {
 extension URI.HTTP : CustomStringConvertible {
 	public var description: String {
 		return storage.uri
+	}
+}
+
+extension URI {
+	init(_ uri: URI.HTTP) {
+		storage = uri.storage
 	}
 }

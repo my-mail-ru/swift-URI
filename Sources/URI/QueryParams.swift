@@ -1,4 +1,4 @@
-struct QueryParams {
+public struct URIQueryParams {
 	var original: [(name: String, value: String)]?
 	var storage: [String: [String]] {
 		didSet { original = nil }
@@ -55,13 +55,13 @@ struct QueryParams {
 	}
 }
 
-extension QueryParams : ExpressibleByDictionaryLiteral {
-	init(dictionaryLiteral: (String, String)...) {
+extension URIQueryParams : ExpressibleByDictionaryLiteral {
+	public init(dictionaryLiteral: (String, String)...) {
 		self.init(dictionaryLiteral)
 	}
 }
 
-extension QueryParams : Sequence {
+extension URIQueryParams : Sequence {
 	public func makeIterator() -> AnyIterator<(name: String, value: String)> {
 		if let original = original {
 			return AnyIterator(original.makeIterator())
@@ -92,22 +92,22 @@ extension QueryParams : Sequence {
 	}
 }
 
-extension QueryParams : CustomStringConvertible {
-	var description: String {
+extension URIQueryParams : CustomStringConvertible {
+	public var description: String {
 		var query: String = ""
 		let i = makeIterator()
 		if let (name, value) = i.next() {
-			QueryParams.writePctEncoded(name, to: &query)
+			URIQueryParams.writePctEncoded(name, to: &query)
 			query.append("=")
-			QueryParams.writePctEncoded(value, to: &query)
+			URIQueryParams.writePctEncoded(value, to: &query)
 		} else {
 			return query
 		}
 		while let (name, value) = i.next() {
 			query.append("&")
-			QueryParams.writePctEncoded(name, to: &query)
+			URIQueryParams.writePctEncoded(name, to: &query)
 			query.append("=")
-			QueryParams.writePctEncoded(value, to: &query)
+			URIQueryParams.writePctEncoded(value, to: &query)
 		}
 		return query
 	}

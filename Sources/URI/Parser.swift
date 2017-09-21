@@ -1,20 +1,22 @@
 enum URIParser {
 	// scheme = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
-	static func parseScheme(uri: String, index i: inout String.Index) throws -> Substring {
+	static func parseScheme(uri: String, index i: inout String.Index) throws -> (value: Substring, isNormalized: Bool) {
 		guard i != uri.endIndex else { throw URIError.invalidScheme }
+		// [RFC3986, section 3.1] ... should only produce lowercase scheme names for consistency.
+		var isNormalized = true
 		let start = i
 		switch uri[i] {
 			case "a"..."z": break
-			case "A"..."Z": break
+			case "A"..."Z": isNormalized = false
 			default: throw URIError.invalidScheme
 		}
 		uri.formIndex(after: &i)
-		while i != uri.endIndex {
+		loop: while i != uri.endIndex {
 			switch uri[i] {
 				case "a"..."z": break
-				case ":": return uri[start..<i]
+				case ":": break loop
 				case "0"..."9": break
-				case "A"..."Z": break
+				case "A"..."Z": isNormalized = false
 				case "+": break
 				case "-": break
 				case ".": break
@@ -22,7 +24,7 @@ enum URIParser {
 			}
 			uri.formIndex(after: &i)
 		}
-		return uri[start..<i]
+		return (value: uri[start..<i], isNormalized: isNormalized)
 	}
 
 	// authority   = [ userinfo "@" ] host [ ":" port ]
@@ -62,54 +64,102 @@ enum URIParser {
 	// reg-name    = *( unreserved / pct-encoded / sub-delims )
 	//
 	// port        = *DIGIT
-	static func parseAuthority(uri: String, index i: inout String.Index) throws -> (authority: Substring?, userinfo: Substring?, host: Substring, port: Substring?)? {
+	static func parseAuthority(uri: String, index i: inout String.Index) throws -> (authority: URICompositeStorage?, userinfo: URIComponentStorage<URIUserinfo>?, host: URIComponentStorage<URIHost>, port: UInt?)? {
 		guard i != uri.endIndex && uri[i] == "/" else { return nil }
 		let ni = uri.index(after: i)
 		guard ni != uri.endIndex && uri[ni] == "/" else { return nil }
 		i = uri.index(after: ni)
+
+		enum State {
+			case userinfoOrHost
+			case userinfoOrPort
+			case userinfo
+			case host
+			case hostIPv6
+			case hostIPv6Done
+			case port
+		}
+		var state = State.userinfoOrHost
+
 		let start = i
 		var at: String.Index?
 		var colon: String.Index?
-		var ipv6 = 0
+
+		var isNormalized = true
+		var userinfoIsNormalized = true
+		var hostIsNormalized = true
+
 		loop: while i != uri.endIndex {
 			switch uri[i] {
 				case let v where unreserved(v): break
 				case "/":
 					break loop
-				case "%": try skipPctEncoded(uri: uri, index: &i)
+				case "%": try skipPctEncoded(uri: uri, index: &i, isNormalized: &isNormalized)
 				case ":":
-					if ipv6 == 1 {
-						break
-					} else {
-						colon = i
-						uri.formIndex(after: &i)
-						while i != uri.endIndex {
-							switch uri[i] {
-								case "/": break loop
-								case "0"..."9": break
-								default: throw URIError.invalidAuthority
-							}
+					switch state {
+						case .userinfoOrHost:
+							state = .userinfoOrPort
+							colon = i
 							uri.formIndex(after: &i)
-						}
-						break loop
+							portLoop: while i != uri.endIndex {
+								switch uri[i] {
+									case "/": break loop
+									case "0"..."9": break
+									default:
+										state = .userinfo
+										colon = nil
+										break portLoop
+								}
+								uri.formIndex(after: &i)
+							}
+							if state != .userinfo {
+								break loop
+							}
+						case .host:
+							state = .port
+							colon = i
+							uri.formIndex(after: &i)
+							while i != uri.endIndex {
+								switch uri[i] {
+									case "/": break loop
+									case "0"..."9": break
+									default: throw URIError.invalidAuthority
+								}
+								uri.formIndex(after: &i)
+							}
+							break loop
+						case .userinfo: break
+						case .hostIPv6: break
+						default:
+							throw URIError.invalidAuthority
 					}
 				case "@":
-					if at == nil && ipv6 == 0 {
-						at = i
-					} else {
-						throw URIError.invalidAuthority
+					switch state {
+						case .userinfoOrPort:
+							colon = nil
+							fallthrough
+						case .userinfoOrHost, .userinfo:
+							at = i
+							state = .host
+							userinfoIsNormalized = isNormalized
+							isNormalized = true
+						default:
+							throw URIError.invalidAuthority
 					}
 				case "[":
-					if ipv6 > 0 {
-						throw URIError.invalidAuthority
-					} else {
-						ipv6 = 1
+					switch state {
+						case .userinfoOrHost where i == start,
+							.host where i == (at.map { uri.index(after: $0) } ?? start):
+							state = .hostIPv6
+						default:
+							throw URIError.invalidAuthority
 					}
 				case "]":
-					if ipv6 == 1 {
-						ipv6 = 2
-					} else {
-						throw URIError.invalidAuthority
+					switch state {
+						case .hostIPv6:
+							state = .hostIPv6Done
+						default:
+							throw URIError.invalidAuthority
 					}
 				case let v where subDelims(v): break
 				default: throw URIError.invalidAuthority
@@ -117,11 +167,19 @@ enum URIParser {
 			uri.formIndex(after: &i)
 		}
 		let end = i
+		switch state {
+			case .hostIPv6:
+				throw URIError.invalidAuthority
+			case .hostIPv6Done where uri[uri.index(before: end)] != "]":
+				throw URIError.invalidAuthority
+			default:
+				hostIsNormalized = isNormalized
+		}
 		return (
-			authority: uri[start..<end],
-			userinfo: at.map { uri[start..<$0] },
-			host: uri[(at.map { uri.index(after: $0) } ?? start)..<(colon ?? end)],
-			port: colon.map { uri[uri.index(after: $0)..<end] }
+			authority: .inplace(uri[start..<end]),
+			userinfo: at.map { .inplace(uri[start..<$0], isNormalized: userinfoIsNormalized) },
+			host: .inplace(uri[(at.map { uri.index(after: $0) } ?? start)..<(colon ?? end)], isNormalized: hostIsNormalized),
+			port: colon.flatMap { UInt(String(uri[uri.index(after: $0)..<end])) }
 		)
 	}
 
@@ -145,6 +203,7 @@ enum URIParser {
 	// pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
 	static func parsePath(uri: String, index i: inout String.Index) throws -> Substring {
 		let start = i
+		var isNormalized = true
 		loop: while i != uri.endIndex {
 			switch uri[i] {
 				case let v where unreserved(v): break
@@ -153,7 +212,7 @@ enum URIParser {
 				case "/": break
 				case ":": break
 				case "@": break
-				case "%": try skipPctEncoded(uri: uri, index: &i)
+				case "%": try skipPctEncoded(uri: uri, index: &i, isNormalized: &isNormalized)
 				case let v where subDelims(v): break
 				default: throw URIError.invalidPath
 			}
@@ -165,11 +224,12 @@ enum URIParser {
 	// query = *( pchar / "/" / "?" )
 	static func parseQuery(uri: String, index i: inout String.Index) throws -> Substring {
 		let start = i
+		var isNormalized = true
 		while i != uri.endIndex {
 			switch uri[i] {
 				case let v where unreserved(v): break
 				case let v where subDelims(v): break
-				case "%": try skipPctEncoded(uri: uri, index: &i)
+				case "%": try skipPctEncoded(uri: uri, index: &i, isNormalized: &isNormalized)
 				case "#": return uri[start..<i]
 				case "?": break
 				case "/": break
@@ -185,11 +245,12 @@ enum URIParser {
 	// fragment = *( pchar / "/" / "?" )
 	static func parseFragment(uri: String, index i: inout String.Index) throws -> Substring {
 		let start = i
+		var isNormalized = true
 		while i != uri.endIndex {
 			switch uri[i] {
 				case let v where unreserved(v): break
 				case let v where subDelims(v): break
-				case "%": try skipPctEncoded(uri: uri, index: &i)
+				case "%": try skipPctEncoded(uri: uri, index: &i, isNormalized: &isNormalized)
 				case "?": break
 				case "/": break
 				case ":": break
@@ -201,19 +262,21 @@ enum URIParser {
 		return uri[start..<i]
 	}
 
-	static func validateScheme(_ scheme: String) throws {
+	static func validateScheme(_ scheme: String) throws -> Bool {
 		var i = scheme.startIndex
-		_ = try URIParser.parseScheme(uri: scheme, index: &i)
+		let r = try URIParser.parseScheme(uri: scheme, index: &i)
 		guard i == scheme.endIndex else { throw URIError.invalidScheme }
+		return r.isNormalized
 	}
 
 	// userinfo = *( unreserved / pct-encoded / sub-delims / ":" )
 	static func validateUserinfo(_ userinfo: String) throws {
+		var isNormalized = true
 		var i = userinfo.startIndex
 		while i != userinfo.endIndex {
 			switch userinfo[i] {
 				case ":": break
-				case "%": try skipPctEncoded(uri: userinfo, index: &i)
+				case "%": try skipPctEncoded(uri: userinfo, index: &i, isNormalized: &isNormalized)
 				case let v where unreserved(v): break
 				case let v where subDelims(v): break
 				default: throw URIError.invalidAuthority
@@ -308,16 +371,41 @@ enum URIParser {
 	}
 
 	// pct-encoded = "%" HEXDIG HEXDIG
-	static func skipPctEncoded(uri: String, index i: inout String.Index) throws {
+	static func skipPctEncoded(uri: String, index i: inout String.Index, isNormalized: inout Bool) throws {
+		var octet: UInt8 = 0
 		for _ in 1...2 {
 			uri.formIndex(after: &i)
 			guard i != uri.endIndex else { throw URIError.invalidPctEncoded }
-			switch uri[i] {
-				case "0"..."9": break
-				case "a"..."f": break
-				case "A"..."F": break
+			let c = uri[i]
+			switch c {
+				case "0"..."9":
+					octet = (octet << 4) | UInt8(c.unicodeScalars.first!.value - 0x30)
+				case "a"..."f":
+					octet = (octet << 4) | UInt8(c.unicodeScalars.first!.value - 0x57)
+					// [RFC3986, section 2.1]
+					// For consistency, URI producers and normalizers should use uppercase
+					// hexadecimal digits for all percent-encodings.
+					isNormalized = false
+				case "A"..."F":
+					octet = (octet << 4) | UInt8(c.unicodeScalars.first!.value - 0x37)
 				default: throw URIError.invalidPctEncoded
 			}
+		}
+		// [RFC3986, section 2.3]
+		// For consistency, percent-encoded octets in the ranges of ALPHA
+		// (%41-%5A and %61-%7A), DIGIT (%30-%39), hyphen (%2D), period (%2E),
+		// underscore (%5F), or tilde (%7E) should not be created by URI
+		// producers and, when found in a URI, should be decoded to their
+		// corresponding unreserved characters by URI normalizers.
+		switch octet {
+			case 0x41...0x5a: fallthrough
+			case 0x61...0x7a: fallthrough
+			case 0x30...0x39: fallthrough
+			case 0x2d: fallthrough
+			case 0x2e: fallthrough
+			case 0x5f: fallthrough
+			case 0x7e: isNormalized = false
+			default: break
 		}
 	}
 

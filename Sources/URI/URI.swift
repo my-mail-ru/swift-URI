@@ -1,4 +1,5 @@
 // RFC3986
+
 public struct URI : URIProtocol {
 	var storage: URIStorage
 
@@ -6,84 +7,51 @@ public struct URI : URIProtocol {
 		storage = try URIStorage(uri)
 	}
 
-	public init(scheme: String, userinfo: String? = nil, host: String? = nil, port: UInt? = nil, path: String, query: String? = nil, fragment: String? = nil) throws {
+	public init(scheme: URIScheme, userinfo: URIUserinfo? = nil, host: URIHost? = nil, port: UInt? = nil, path: URIPath, query: URIQuery? = nil, fragment: URIFragment? = nil) throws {
 		storage = try URIStorage(scheme: scheme, userinfo: userinfo, host: host, port: port, path: path, query: query, fragment: fragment)
 	}
 
-	public var scheme: String {
-		return storage.scheme
+	public var scheme: URIScheme {
+		get { return storage.scheme }
+		set { prepareStorage(); storage.scheme = newValue }
 	}
 
 	public var opaque: String {
 		return storage.opaque
 	}
 
-	public var userinfo: String? {
-		return storage.userinfo
+	public var authority: String? {
+		return storage.authority
 	}
 
-	public var host: String? {
-		return storage.host
+	public var userinfo: URIUserinfo? {
+		get { return storage.userinfo }
+		set { prepareStorage(); storage.userinfo = newValue }
+	}
+
+	public var host: URIHost? {
+		get { return storage.host }
+		set { prepareStorage(); storage.host = newValue }
 	}
 
 	public var port: UInt? {
-		return storage.port
+		get { return storage.port }
+		set { prepareStorage(); storage.port = newValue }
 	}
 	
-	public var path: String {
-		return storage.path
+	public var path: URIPath {
+		get { return storage.path }
+		set { prepareStorage(); storage.path = newValue }
 	}
 
-	public var query: String? {
-		return storage.query
+	public var query: URIQuery? {
+		get { return storage.query }
+		set { prepareStorage(); storage.query = newValue }
 	}
 
-	public var fragment: String? {
-		return storage.fragment
-	}
-
-	var pathSegments: PathSegments {
-		get { return storage.pathSegments }
-		set { storage.pathSegments = newValue }
-	}
-
-	var queryParams: QueryParams {
-		return storage.queryParams
-	}
-
-	mutating func set(scheme: String) throws {
-		prepareStorage()
-		try storage.set(scheme: scheme)
-	}
-
-	mutating func set(userinfo: String?) throws {
-		prepareStorage()
-		try storage.set(userinfo: userinfo)
-	}
-
-	mutating func set(host: String?) throws {
-		prepareStorage()
-		try storage.set(host: host)
-	}
-
-	mutating func set(port: UInt?) throws {
-		prepareStorage()
-		try storage.set(port: port)
-	}
-
-	mutating func set(path: String) throws {
-		prepareStorage()
-		try storage.set(path: path)
-	}
-
-	mutating func set(query: String?) throws {
-		prepareStorage()
-		try storage.set(query: query)
-	}
-
-	mutating func set(fragment: String?) throws {
-		prepareStorage()
-		try storage.set(fragment: fragment)
+	public var fragment: URIFragment? {
+		get { return storage.fragment }
+		set { prepareStorage(); storage.fragment = newValue }
 	}
 
 	private mutating func prepareStorage() {
@@ -92,9 +60,8 @@ public struct URI : URIProtocol {
 		}
 	}
 
-	public var normalized: URI {
-		// TODO
-		return self
+	public func normalized() -> URI {
+		return self // TODO
 	}
 }
 
